@@ -403,6 +403,8 @@ h2{text-wrap:balance}
 .fleft.over b,.fleft.over small,.ovt{color:var(--over)}
 .ovt{font-style:normal}
 .wcol i.k.over{background:var(--over)}
+.sync{font-weight:600;color:var(--ok)}
+.sync.bad{color:var(--over)}
 @keyframes popin{from{transform:scale(.3);opacity:0}to{transform:scale(1);opacity:1}}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}.cheer .em{animation:none}}
 </style>
@@ -552,7 +554,7 @@ let S=defaults(),W=null;
 try{const j=JSON.parse(localStorage.getItem(KEY));if(j&&Array.isArray(j.logs))S=Object.assign(defaults(),j)}catch(e){}
 try{const j=JSON.parse(localStorage.getItem(AKEY));if(j&&Array.isArray(j.ex))W=j}catch(e){}
 fixFood();loadCustomEx();
-const save=()=>{try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}};
+const save=()=>{S.savedAt=Date.now();try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}syncSoon()};
 const saveW=()=>{try{W?localStorage.setItem(AKEY,JSON.stringify(W)):localStorage.removeItem(AKEY)}catch(e){}};
 const UI={view:'home',sheet:null,f:'all',q:'',openLog:null,done:null,ptab:'history',gt:'body'};
 let B=null,T=null,TK='',AC=null,WL=null,lastView=null,SHO=null;
@@ -1233,7 +1235,7 @@ function saveEditor(){
 /* backup */
 function backupText(){return `Lift backup, ${new Date().toLocaleDateString(undefined,{day:'numeric',month:'long',year:'numeric'})}\nTo restore: Lift > Settings > paste this whole note > Restore from text.\n`+JSON.stringify(Object.assign({},S,{lastBackup:todayISO(),backupSnooze:null}))}
 function hasData(){return S.logs.length||Object.values(S.entries).some(a=>a.length)||Object.keys(S.food.log).length}
-function backupDue(){if(!hasData())return false;const t=todayISO();if(S.backupSnooze&&t<S.backupSnooze)return false;if(!S.lastBackup)return true;return (new Date(t)-new Date(S.lastBackup))/864e5>=30}
+function backupDue(){if(!hasData())return false;if(syncOn()&&!SY.err&&S.lastBackup&&(new Date(todayISO())-new Date(S.lastBackup))/864e5<90)return false;const t=todayISO();if(S.backupSnooze&&t<S.backupSnooze)return false;if(!S.lastBackup)return true;return (new Date(t)-new Date(S.lastBackup))/864e5>=30}
 function copyBackup(){
   const txt=backupText();
   const ok=()=>{S.lastBackup=todayISO();S.backupSnooze=null;save();UI.sheet={type:'bkdone'};renderSheet();if(UI.view==='home')render()};
@@ -1348,6 +1350,123 @@ function featInput(k,t){
   if(k==='ler'){L.ex[i].sets[j].r=t.value;return true}
   return false;
 }
+
+/* ---------- cloud sync (private GitHub repo) ---------- */
+const SKEY='lift_sync_v1',SFILE='lift-data.json';
+let SY={repo:'',token:'',sha:null,last:null,err:null,busy:false};
+try{const j=JSON.parse(localStorage.getItem(SKEY));if(j&&j.repo)SY=Object.assign(SY,j,{busy:false})}catch(e){}
+const saveSY=()=>{try{localStorage.setItem(SKEY,JSON.stringify({repo:SY.repo,token:SY.token,sha:SY.sha,last:SY.last,err:SY.err}))}catch(e){}};
+const syncOn=()=>!!(SY.repo&&SY.token);
+let syT=null,syDirty=false;
+function syncSoon(){try{if(!syncOn())return}catch(e){return}syDirty=true;clearTimeout(syT);syT=setTimeout(()=>syncPush(),8000)}
+function b64enc(str){const b=new TextEncoder().encode(str);let s='';for(let i=0;i<b.length;i+=32768)s+=String.fromCharCode.apply(null,b.subarray(i,i+32768));return btoa(s)}
+function b64dec(b64){const s=atob(b64.replace(/\s/g,'')),b=new Uint8Array(s.length);for(let i=0;i<s.length;i++)b[i]=s.charCodeAt(i);return new TextDecoder().decode(b)}
+async function gh(path,opt){
+  opt=opt||{};
+  const r=await fetch('https://api.github.com/repos/'+SY.repo+'/contents/'+path,{method:opt.method||'GET',headers:Object.assign({'Authorization':'Bearer '+SY.token,'Accept':'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28'},opt.body?{'Content-Type':'application/json'}:{},opt.headers||{}),body:opt.body?JSON.stringify(opt.body):undefined,cache:'no-store'});
+  return r;
+}
+function syErr(r){
+  if(!r)return 'Couldn’t reach GitHub. Check the internet connection. Changes are kept on this phone and will sync later.';
+  if(r.status===401)return 'GitHub didn’t accept the access token. It may have expired. Create a new one and paste it in Settings.';
+  if(r.status===403)return 'The access token isn’t allowed to change this repository. Give it Contents: Read and write access.';
+  if(r.status===404)return 'Couldn’t find that repository. Check the name, and that the token has access to it.';
+  return 'GitHub returned an error ('+r.status+'). Your data is safe on this phone and Lift will try again.';
+}
+async function syncPull(){
+  let r;try{r=await gh(SFILE)}catch(e){return {err:syErr(null)}}
+  if(r.status===404){
+    let rr;try{rr=await fetch('https://api.github.com/repos/'+SY.repo,{headers:{'Authorization':'Bearer '+SY.token,'Accept':'application/vnd.github+json'},cache:'no-store'})}catch(e){return {err:syErr(null)}}
+    return rr.ok?{none:true}:{err:syErr(rr)};
+  }
+  if(!r.ok)return {err:syErr(r)};
+  const j=await r.json();let text;
+  if(j.content&&j.encoding==='base64')text=b64dec(j.content);
+  else{let rw;try{rw=await gh(SFILE,{headers:{'Accept':'application/vnd.github.raw+json'}})}catch(e){return {err:syErr(null)}}if(!rw.ok)return {err:syErr(rw)};text=await rw.text()}
+  let data=null;try{data=JSON.parse(text)}catch(e){return {err:'The data file on GitHub is damaged. Lift didn’t change anything on this phone.'}}
+  return {sha:j.sha,data};
+}
+async function syncPush(force){
+  if(!syncOn()||SY.busy)return;
+  if(!syDirty&&!force)return;
+  SY.busy=true;syDirty=false;
+  const body={message:'Lift sync '+new Date().toISOString(),content:b64enc(JSON.stringify(S))};
+  try{
+    for(let attempt=0;attempt<2;attempt++){
+      if(SY.sha)body.sha=SY.sha;else delete body.sha;
+      let r;try{r=await gh(SFILE,{method:'PUT',body})}catch(e){SY.err=syErr(null);syDirty=true;break}
+      if(r.ok){const j=await r.json();SY.sha=j.content&&j.content.sha;SY.last=Date.now();SY.err=null;break}
+      if(r.status===409||r.status===422){const p=await syncPull();if(p.sha){SY.sha=p.sha;continue}if(p.none){SY.sha=null;continue}SY.err=p.err;syDirty=true;break}
+      SY.err=syErr(r);syDirty=true;break;
+    }
+  }finally{SY.busy=false;saveSY();refreshSyncLine()}
+}
+function adoptRemote(data){S=Object.assign(defaults(),data);fixFood();loadCustomEx();try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}applyTheme()}
+const sum=d=>`${(d.logs||[]).length} workouts, ${Object.keys((d.food&&d.food.log)||{}).length} days of food`;
+// on open: if another phone saved newer data, load it
+async function syncOnOpen(){
+  if(!syncOn())return;
+  const p=await syncPull();
+  if(p.err){SY.err=p.err;saveSY();return}
+  if(p.none){SY.sha=null;syncPush(true);return}
+  const remoteAt=(p.data&&p.data.savedAt)||0,localAt=S.savedAt||0;
+  if(p.sha!==SY.sha&&remoteAt>localAt){SY.sha=p.sha;adoptRemote(p.data);SY.last=Date.now();SY.err=null;saveSY();render()}
+  else{SY.sha=p.sha;if(localAt>remoteAt)syncPush(true);else{SY.err=null;saveSY()}}
+}
+function syncLine(){
+  if(!syncOn())return 'Not connected. Your data is only on this phone.';
+  if(SY.err)return SY.err;
+  if(SY.busy)return 'Saving to GitHub…';
+  if(!SY.last)return 'Connected to '+SY.repo+'.';
+  const m=Math.round((Date.now()-SY.last)/60000);
+  return 'Saved to '+SY.repo+' '+(m<1?'just now':m<60?m+' min ago':m<1440?Math.round(m/60)+' h ago':fday(isoDate(new Date(SY.last))))+'.';
+}
+function refreshSyncLine(){const el=$('#syline');if(el){el.textContent=syncLine();el.classList.toggle('bad',!!SY.err)}}
+function syncSettingsHTML(){
+  return `<div class="lab">Cloud sync</div><p class="sub" style="margin-bottom:8px">Saves everything to a private GitHub repository a few seconds after each change, so a new phone can pick up where this one left off.</p>
+  <p class="sub sync ${SY.err?'bad':''}" id="syline">${esc(syncLine())}</p>
+  ${syncOn()?`<div class="two" style="margin-top:8px"><button class="btn sm ghost" data-a="syncnow">Sync now</button><button class="btn sm ghost danger" data-a="syncoff">Disconnect</button></div>`
+  :`<div style="height:8px"></div><button class="btn sm pop" data-a="syncsetup">Connect to GitHub</button>`}`;
+}
+function syncSheet(s){
+  if(s.type==='syncsetup')return `<h2>Connect cloud sync</h2><p class="sub" style="margin-bottom:12px">Paste the repository name and the access token you created on GitHub. The token stays on this phone and is never included in Notes backups.</p>
+    <small>Repository</small><input class="field" id="syrepo" placeholder="username/lift-data" value="${esc(SY.repo||'')}" autocapitalize="off" autocorrect="off" spellcheck="false">
+    <small>Access token</small><input class="field" id="sytok" type="password" placeholder="github_pat_…" autocapitalize="off" autocorrect="off" spellcheck="false" autocomplete="off">
+    ${s.err?`<p class="hint">${esc(s.err)}</p>`:''}
+    <button class="btn pop" data-a="syncconnect">${s.busy?'Connecting…':'Connect'}</button><div style="height:10px"></div><button class="btn ghost" data-a="closesheet">Cancel</button>`;
+  if(s.type==='syncchoose')return `<h2>Which data should Lift keep?</h2><p class="sub" style="margin-bottom:14px">This phone and GitHub both have Lift data.</p>
+    <button class="btn pop" data-a="syncuseremote">Use GitHub’s data</button><p class="sub" style="margin:4px 0 12px">${esc(s.remote)}, saved ${esc(s.remoteAt)}. Replaces what’s on this phone.</p>
+    <button class="btn ghost" data-a="syncuselocal">Use this phone’s data</button><p class="sub" style="margin:4px 0 12px">${esc(s.local)}. Replaces what’s on GitHub (older versions stay in the repository history).</p>
+    <button class="btn ghost" data-a="syncoffcancel">Cancel</button>`;
+  return null;
+}
+async function syncConnect(){
+  const repo=($('#syrepo').value||'').trim().replace(/^https?:\/\/github\.com\//,'').replace(/\.git$/,'').replace(/\/$/,''),tok=($('#sytok').value||'').trim();
+  if(!/^[\w.-]+\/[\w.-]+$/.test(repo)){UI.sheet={type:'syncsetup',err:'Enter the repository as username/repository, for example sneakytb/lift-data.'};renderSheet();return}
+  if(!tok){UI.sheet={type:'syncsetup',err:'Paste the access token from GitHub.'};renderSheet();$('#syrepo').value=repo;return}
+  const prev={repo:SY.repo,token:SY.token,sha:SY.sha};
+  SY.repo=repo;SY.token=tok;SY.sha=null;UI.sheet={type:'syncsetup',busy:true};renderSheet();$('#syrepo').value=repo;
+  const p=await syncPull();
+  if(p.err){Object.assign(SY,prev);UI.sheet={type:'syncsetup',err:p.err};renderSheet();$('#syrepo').value=repo;return}
+  saveSY();
+  if(p.none){await syncPush(true);UI.sheet={type:'cheer',em:'☁️',title:'Cloud sync is on',msg:'Your data is saved to '+repo+'. From now on every change is saved there automatically.'};renderSheet();return}
+  SY.sha=p.sha;saveSY();
+  if(!hasData()){adoptRemote(p.data);SY.last=Date.now();saveSY();UI.sheet={type:'cheer',em:'☁️',title:'Data restored',msg:'Loaded '+sum(p.data)+' from GitHub. Cloud sync is on.'};render();return}
+  UI.sheet={type:'syncchoose',remote:sum(p.data),remoteAt:p.data.savedAt?new Date(p.data.savedAt).toLocaleString(undefined,{day:'numeric',month:'short',hour:'numeric',minute:'2-digit'}):'earlier',local:sum(S),data:p.data};renderSheet();
+}
+function syncAct(a){
+  switch(a){
+    case 'syncsetup':UI.sheet={type:'syncsetup'};renderSheet();return true;
+    case 'syncconnect':syncConnect();return true;
+    case 'syncuseremote':{const d=UI.sheet.data;adoptRemote(d);SY.last=Date.now();SY.err=null;saveSY();UI.sheet={type:'cheer',em:'☁️',title:'Data loaded from GitHub',msg:'Cloud sync is on.'};render();return true}
+    case 'syncuselocal':syncPush(true).then(()=>{UI.sheet={type:'cheer',em:'☁️',title:'Cloud sync is on',msg:'This phone’s data is now saved to '+SY.repo+'.'};renderSheet()});return true;
+    case 'syncoffcancel':SY={repo:'',token:'',sha:null,last:null,err:null,busy:false};saveSY();UI.sheet=null;renderSheet();return true;
+    case 'syncnow':syncPush(true);refreshSyncLine();return true;
+    case 'syncoff':UI.sheet={type:'confirm',msg:'Turn off cloud sync on this phone? Your data stays on the phone and in the GitHub repository.',yes:'Disconnect',fn:()=>{SY={repo:'',token:'',sha:null,last:null,err:null,busy:false};saveSY()}};renderSheet();return true;
+  }
+  return false;
+}
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden'&&syDirty){clearTimeout(syT);syncPush()}});
 
 /* ---------- views ---------- */
 function weekStrip(){
@@ -1570,6 +1689,7 @@ function tabsHTML(){
 
 /* ---------- sheets ---------- */
 function sheetBody(s){
+  {const ss=syncSheet(s);if(ss!=null)return ss;}
   {const xs=featSheet(s);if(xs!=null)return xs;const fs=foodSheet(s);if(fs!=null)return fs;}
   if(s.type==='unticked')return `<h2>${s.n} set${s.n>1?'s':''} not ticked</h2><p class="sub" style="margin-bottom:16px">On ${esc(s.names.join(', '))}. Only ticked sets are saved. Did you do ${s.n>1?'them':'it'}?</p><button class="btn pop" data-a="tickall">Yes, log ${s.n>1?'them':'it'} too</button><div style="height:10px"></div><button class="btn ghost" data-a="onlyticked">No, save only ticked sets</button><div style="height:10px"></div><button class="btn ghost" data-a="closesheet">Back to workout</button>`;
   if(s.type==='cheer')return `<span class="em">${s.em}</span><h2>${esc(s.title)}</h2><p>${esc(s.msg)}</p><button class="btn pop" data-a="closesheet">Keep going</button>`;
@@ -1593,6 +1713,7 @@ function sheetBody(s){
   if(s.type==='settings')return `<h2>Settings</h2>
   <div class="lab">Rest timer</div><div class="seg">${[[60,'1:00'],[90,'1:30'],[120,'2:00'],[150,'2:30']].map(([v,l])=>`<button class="${S.rest===v?'on':''}" data-a="rest" data-v="${v}">${l}</button>`).join('')}</div>
   <div class="lab">Display colours</div><div class="seg">${[['auto','Auto'],['dark','Dark'],['light','Light'],['custom','Custom']].map(([v,l])=>`<button class="${S.theme===v?'on':''}" data-a="theme" data-v="${v}">${l}</button>`).join('')}</div>${S.theme==='custom'?customPanel():''}
+  ${syncSettingsHTML()}
   <div class="lab">Backup</div><p class="sub" style="margin-bottom:8px">Your data lives only on this phone. ${S.lastBackup?`Last backup: ${fday(S.lastBackup)}.`:'You haven’t made a backup yet.'} Copy a backup and paste it into a note in Notes. To restore, paste the whole note below and tap Restore.</p>
   <button class="btn sm pop" data-a="bkcopy">Copy backup for Notes</button><div style="height:10px"></div>
   <textarea id="bk" rows="3" placeholder="Paste a backup here to restore"></textarea>
@@ -1714,7 +1835,7 @@ function act(a,d,t,ev){
     case 'tadd':if(T){T.end+=15000;renderTimer()}break;
     case 'tsub':if(T){T.end-=15000;renderTimer()}break;
     case 'tskip':T=null;renderTimer();break;
-    default:if(!featAct(a,d,t,ev))foodAct(a,d,t,ev);
+    default:if(!syncAct(a)&&!featAct(a,d,t,ev))foodAct(a,d,t,ev);
   }
 }
 document.addEventListener('click',e=>{const t=e.target.closest('[data-a]');if(!t)return;act(t.dataset.a,t.dataset,t,e)});
@@ -1734,6 +1855,8 @@ document.addEventListener('input',e=>{
 document.getElementById('fcam').addEventListener('change',e=>{const f=e.target.files&&e.target.files[0];if(f)handleScanFile(f)});
 applyTheme();
 render();
+syncOnOpen();
+setInterval(()=>{if(document.visibilityState==='visible')refreshSyncLine()},30000);
 })();
 </script>
 </body>
