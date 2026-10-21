@@ -395,6 +395,14 @@ h2{text-wrap:balance}
 .hz.night{color:#F4EEF8}
 .hzs{position:absolute;top:12px;right:12px;width:38px;height:38px;border-radius:12px;background:color-mix(in srgb,var(--surface) 65%,transparent);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);color:var(--ink)}
 .hz.night .hzs{background:rgba(255,255,255,.14);color:#F4EEF8}
+/* energy limit */
+:root{--over:#D6453D}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--over:#FF6B5E}}
+:root[data-theme="dark"]{--over:#FF6B5E}
+.bar.over i{background:var(--over)}
+.fleft.over b,.fleft.over small,.ovt{color:var(--over)}
+.ovt{font-style:normal}
+.wcol i.k.over{background:var(--over)}
 @keyframes popin{from{transform:scale(.3);opacity:0}to{transform:scale(1);opacity:1}}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}.cheer .em{animation:none}}
 </style>
@@ -947,7 +955,7 @@ function vFood(){
   const left=T.kcal-t.kcal,dl=new Date(iso+'T12:00:00').toLocaleDateString(undefined,{weekday:'long',day:'numeric',month:'long'});
   let h=`<div class="wrap"><div class="top"><div><h1>Food</h1><small>Calories and protein for the day</small></div><button class="icon" data-a="ftarget" aria-label="Food targets">${svg(ico.gear)}</button></div>`;
   h+=`<div class="fnav"><button class="icon" data-a="fdnav" data-v="-1" aria-label="Previous day">${svg(ico.back,20)}</button><b>${today?'Today':esc(dl)}</b><button class="icon" data-a="fdnav" data-v="1" ${today?'disabled style="opacity:.3"':''} aria-label="Next day">${svg('<path d="M9 5l7 7-7 7"/>',20)}</button></div>`;
-  h+=`<div class="card fsum"><div class="fbig"><div><div class="big">${enV(t.kcal).toLocaleString()}<span>${enU()}</span></div><small>of ${enV(T.kcal).toLocaleString()} ${enU()} target</small></div><div class="fleft"><b>${enV(Math.abs(left)).toLocaleString()}</b><small>${left>=0?'left':'over'}</small></div></div>${foodBar(t.kcal,T.kcal,'sun')}
+  h+=`<div class="card fsum"><div class="fbig"><div><div class="big">${enV(t.kcal).toLocaleString()}<span>${enU()}</span></div><small>of ${enV(T.kcal).toLocaleString()} ${enU()} limit</small></div><div class="fleft${left<0?' over':''}"><b>${enV(Math.abs(left)).toLocaleString()}</b><small>${left>=0?'left':'over'}</small></div></div>${foodBar(t.kcal,T.kcal,t.kcal>T.kcal?'over':'sun')}
   <div class="fprot"><span><b>Protein</b> ${Math.round(t.p)} of ${T.p} g</span><span class="sub">${t.p>=T.p?'Target hit':Math.round(T.p-t.p)+' g to go'}</span></div>${foodBar(t.p,T.p,'ok')}
   <small>Carbs ${Math.round(t.c)} g, fat ${Math.round(t.f)} g</small></div>`;
   h+=`<div class="two" style="margin:12px 0 4px"><button class="btn pop" data-a="fscan" data-m="${defMeal()}">${svg(ico.scan,22)} Scan</button><button class="btn ghost" data-a="fadd" data-m="${defMeal()}">${svg('<circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/>',22)} Search</button></div>`;
@@ -986,7 +994,7 @@ function foodSheet(s){
     <button class="btn pop" data-a="csave">Save food</button><div style="height:10px"></div><button class="btn ghost" data-a="closesheet">Cancel</button>`}
   if(s.type==='ftarget'){const T=S.food.target,sp=suggestProtein();
     return `<h2>Food targets</h2><div class="lab" style="margin-top:0">Show energy in</div><div class="seg" style="margin-bottom:12px">${[['kcal','Calories (Cal)'],['kj','Kilojoules (kJ)']].map(([v,l])=>`<button class="${S.food.unit===v?'on':''}" data-a="funitset" data-v="${v}">${l}</button>`).join('')}</div>
-    <div class="f2"><div><small>Daily energy (${enU()})</small><input class="field" id="tk" inputmode="numeric" value="${enV(T.kcal)}"></div><div><small>Daily protein (g)</small><input class="field" id="tp" inputmode="numeric" value="${T.p}"></div></div>
+    <div class="f2"><div><small>Daily energy limit (${enU()})</small><input class="field" id="tk" inputmode="numeric" value="${enV(T.kcal)}"></div><div><small>Daily protein (g)</small><input class="field" id="tp" inputmode="numeric" value="${T.p}"></div></div>
     <p class="sub" style="margin-bottom:14px">${sp?`For building muscle, a common guide is 1.6 to 2.2 g of protein per kg of body weight. At ${fv(sp.w)} kg that’s about ${sp.lo} to ${sp.hi} g a day.`:'For building muscle, a common guide is 1.6 to 2.2 g of protein per kg of body weight. Log your weight on the Body tab and this will suggest a number.'} Energy needs vary a lot from person to person. A dietitian can help set numbers that suit your training.</p>
     <button class="btn pop" data-a="tsave">Save</button><div style="height:10px"></div><button class="btn ghost" data-a="closesheet">Cancel</button>`}
   if(s.type==='fscanning')return `<h2>Reading barcode…</h2><p class="sub" style="margin-bottom:16px">This takes a second or two.</p><button class="btn ghost" data-a="closesheet">Cancel</button>`;
@@ -1247,8 +1255,8 @@ function weekFoodHTML(iso){
   const logged=data.filter(x=>x.n),avgK=logged.length?logged.reduce((a,x)=>a+x.t.kcal,0)/logged.length:0,avgP=logged.length?logged.reduce((a,x)=>a+x.t.p,0)/logged.length:0;
   const H=v=>Math.min(130,v*100)/130*100;
   return `<section class="card hcard"><div class="hh"><h3>Last 7 days</h3><small>${logged.length?`${logged.length} day${logged.length>1?'s':''} logged`:'Nothing logged yet'}</small></div>
-  <div class="wbars">${data.map(x=>{const dt=new Date(x.d+'T12:00:00');return `<button class="wb ${x.d===iso?'on':''}" data-a="fgo" data-d="${x.d}" aria-label="${dt.toLocaleDateString(undefined,{weekday:'long'})}: ${en(x.t.kcal)}, ${Math.round(x.t.p)} g protein"><span class="wcol"><i class="k" style="height:${H(T.kcal?x.t.kcal/T.kcal:0).toFixed(1)}%"></i><i class="p" style="height:${H(T.p?x.t.p/T.p:0).toFixed(1)}%"></i></span><small>${dt.toLocaleDateString(undefined,{weekday:'narrow'})}</small></button>`}).join('')}</div>
-  <div class="mleg"><span><i style="background:var(--sun)"></i>Energy</span><span><i style="background:var(--ok)"></i>Protein</span><span>Line is your target</span></div>
+  <div class="wbars">${data.map(x=>{const dt=new Date(x.d+'T12:00:00');return `<button class="wb ${x.d===iso?'on':''}" data-a="fgo" data-d="${x.d}" aria-label="${dt.toLocaleDateString(undefined,{weekday:'long'})}: ${en(x.t.kcal)}, ${Math.round(x.t.p)} g protein"><span class="wcol"><i class="k${x.t.kcal>T.kcal?' over':''}" style="height:${H(T.kcal?x.t.kcal/T.kcal:0).toFixed(1)}%"></i><i class="p" style="height:${H(T.p?x.t.p/T.p:0).toFixed(1)}%"></i></span><small>${dt.toLocaleDateString(undefined,{weekday:'narrow'})}</small></button>`}).join('')}</div>
+  <div class="mleg"><span><i style="background:var(--sun)"></i>Energy</span><span><i style="background:var(--ok)"></i>Protein</span><span>Dashed line: energy limit and protein target</span></div>
   ${logged.length?`<p class="sub" style="margin-top:8px">Average on logged days: <b class="ink">${en(avgK)}</b> and <b class="ink">${Math.round(avgP)} g protein</b>.</p>`:''}</section>`;
 }
 
@@ -1358,7 +1366,8 @@ function ringsSVG(rs,anim){
   return `<svg class="rings${anim?' anim':''}" viewBox="0 0 132 132" aria-hidden="true">`+rs.map((r,i)=>{
     const c=2*Math.PI*R[i],p=Math.max(0,Math.min(1,r.t>0?r.v/r.t:0)),off=c*(1-p);
     return `<circle cx="66" cy="66" r="${R[i]}" fill="none" stroke="${r.col}" stroke-opacity=".16" stroke-width="${sw}"/>`+
-      (p>0?`<circle class="arc" cx="66" cy="66" r="${R[i]}" fill="none" stroke="${r.col}" stroke-width="${sw}" stroke-linecap="round" stroke-dasharray="${c.toFixed(1)}" stroke-dashoffset="${off.toFixed(1)}" style="--c:${c.toFixed(1)};animation-delay:${i*110}ms" transform="rotate(-90 66 66)"/>`:'');
+      (p>0?`<circle class="arc" cx="66" cy="66" r="${R[i]}" fill="none" stroke="${r.col}" stroke-width="${sw}" stroke-linecap="round" stroke-dasharray="${c.toFixed(1)}" stroke-dashoffset="${off.toFixed(1)}" style="--c:${c.toFixed(1)};animation-delay:${i*110}ms" transform="rotate(-90 66 66)"/>`:'')+
+      (r.limit&&r.t>0&&r.v>r.t?(()=>{const q=Math.min(1,(r.v-r.t)/r.t),o2=c*(1-q);return `<circle class="arc ov" cx="66" cy="66" r="${R[i]}" fill="none" stroke="var(--over)" stroke-width="${sw}" stroke-linecap="round" stroke-dasharray="${c.toFixed(1)}" stroke-dashoffset="${o2.toFixed(1)}" style="--c:${c.toFixed(1)};animation-delay:${i*110+900}ms" transform="rotate(-90 66 66)"/>`})():'');
   }).join('')+`</svg>`;
 }
 function donut(p,col,size){
@@ -1411,8 +1420,8 @@ function vHome(){
   const now=new Date(),hr=now.getHours(),greet=hr<5?'Good evening':hr<12?'Good morning':hr<17?'Good afternoon':'Good evening';
   const wg=S.goals.find(g=>g.type==='week'),wt=wg?wg.n:P.days.length,wc=ws.n;
   const ti=todayISO(),ft=totals(ti),T=S.food.target;
-  const rs=[{v:wc,t:wt,col:'var(--pop)'},{v:ft.kcal,t:T.kcal,col:'var(--sun)'},{v:ft.p,t:T.p,col:'var(--ok)'}];
-  const lg=[['Workouts this week',`${wc}<span>/${wt}</span>`,'var(--pop)','tab','progress'],[`Energy today, ${enU()}`,`${enV(ft.kcal).toLocaleString()}<span>/${enV(T.kcal).toLocaleString()}</span>`,'var(--sun)','tab','food'],['Protein today',`${Math.round(ft.p)}<span>/${T.p} g</span>`,'var(--ok)','tab','food']];
+  const rs=[{v:wc,t:wt,col:'var(--pop)'},{v:ft.kcal,t:T.kcal,col:'var(--sun)',limit:true},{v:ft.p,t:T.p,col:'var(--ok)'}];
+  const lg=[['Workouts this week',`${wc}<span>/${wt}</span>`,'var(--pop)','tab','progress'],[`Energy today, ${enU()}`,`${ft.kcal>T.kcal?'<em class="ovt">':''}${enV(ft.kcal).toLocaleString()}${ft.kcal>T.kcal?'</em>':''}<span>/${enV(T.kcal).toLocaleString()}</span>`,'var(--sun)','tab','food'],['Protein today',`${Math.round(ft.p)}<span>/${T.p} g</span>`,'var(--ok)','tab','food']];
   let h=`<div class="wrap home"><header class="hz ${sceneOf(hr)}">${horizonSVG(sceneOf(hr))}<div class="hzt"><small class="eyebrow">${now.toLocaleDateString(undefined,{weekday:'long',day:'numeric',month:'long'})}</small><h1>${greet}</h1></div><button class="icon hzs" data-a="settings" aria-label="Settings">${svg(ico.gear)}</button></header>`;
   h+=`<section class="card glance" aria-label="Today at a glance"><div class="tw">${ringsSVG(rs,anim)}<div class="legend">${lg.map(([l,v,c,a,t])=>`<button class="lgi" data-a="${a}" data-v="${t}"><i style="background:${c}"></i><span><small>${l}</small><b>${v}</b></span></button>`).join('')}</div></div>${ws.html}<small class="wkline">Week ${weekNo()} of training${wg?'':`, aiming for ${wt} sessions`}</small></section>`;
   if(backupDue())h+=`<div class="banner bk"><b>${S.lastBackup?'Time for your monthly backup':'Back up your data'}</b>Everything in Lift is stored only on this phone. Copy a backup and paste it into a note in Notes so nothing is lost if the phone is replaced.<div class="two"><button class="btn sm pop" data-a="bkcopy">Copy backup</button><button class="btn sm ghost" data-a="bklater">Later</button></div></div>`;
@@ -1433,8 +1442,8 @@ function vHome(){
   {const left=T.kcal-ft.kcal,pk=ft.p*4,ck=ft.c*4,fk=ft.f*9,tk=pk+ck+fk;
    const seg=(v,c)=>tk>0&&v>0?`<i style="flex:${v.toFixed(1)};background:${c}"></i>`:'';
    h+=`<section class="card hcard"><div class="hh"><h3>Food today</h3><button class="link" data-a="tab" data-v="food">Open log ${svg('<path d="M9 5l7 7-7 7"/>',16)}</button></div>
-   <div class="fline"><div class="big md">${enV(ft.kcal).toLocaleString()}<span>${enU()}</span></div><small>${left>=0?`${enV(left).toLocaleString()} left of ${enV(T.kcal).toLocaleString()}`:`${enV(-left).toLocaleString()} over your ${enV(T.kcal).toLocaleString()} target`}</small></div>
-   ${foodBar(ft.kcal,T.kcal,'sun')}
+   <div class="fline"><div class="big md">${enV(ft.kcal).toLocaleString()}<span>${enU()}</span></div><small>${left>=0?`${enV(left).toLocaleString()} left of ${enV(T.kcal).toLocaleString()}`:`${enV(-left).toLocaleString()} over your ${enV(T.kcal).toLocaleString()} limit`}</small></div>
+   ${foodBar(ft.kcal,T.kcal,ft.kcal>T.kcal?'over':'sun')}
    <div class="mbar">${tk>0?seg(pk,'var(--ok)')+seg(ck,'var(--sun)')+seg(fk,'var(--pop)'):''}</div>
    <div class="mleg"><span><i style="background:var(--ok)"></i>Protein <b>${Math.round(ft.p)} g</b></span><span><i style="background:var(--sun)"></i>Carbs <b>${Math.round(ft.c)} g</b></span><span><i style="background:var(--pop)"></i>Fat <b>${Math.round(ft.f)} g</b></span></div>
    <div class="two"><button class="btn sm pop" data-a="fscan" data-m="${defMeal()}">${svg(ico.scan,20)} Scan</button><button class="btn sm ghost" data-a="fadd" data-m="${defMeal()}">${svg('<path d="M12 5v14M5 12h14"/>',20)} Add food</button></div></section>`;}
