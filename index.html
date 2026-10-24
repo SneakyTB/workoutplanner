@@ -431,6 +431,29 @@ h2{text-wrap:balance}
 .hero .dots i{display:block;width:7px;height:7px;border-radius:50%;background:currentColor;opacity:.28;transition:width .2s,opacity .2s}
 .hero .dots button.nx i{opacity:.55}
 .hero .dots button.on i{opacity:1;width:18px;border-radius:4px;background:var(--pop)}
+/* muscle map */
+:root{--mz0:#E6DEEC;--bodyc:#F5F1F8}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--mz0:#3B2D45;--bodyc:#2A2031}}
+:root[data-theme="dark"]{--mz0:#3B2D45;--bodyc:#2A2031}
+.tapcard{cursor:pointer}
+.tapcard .hh{margin-bottom:2px}
+.bodymap{padding:14px 10px 12px}
+.bodies{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.bodies figure{margin:0;text-align:center}
+.bodies figcaption{font-size:12.5px;color:var(--muted);font-weight:600;margin-top:2px}
+.bodysvg{width:100%;height:auto;display:block;max-height:360px}
+.bodysvg .bd{fill:var(--bodyc);stroke:var(--line);stroke-width:1.5;stroke-linejoin:round}
+.bodysvg .hair{fill:var(--muted);opacity:.45;stroke:none}
+.bodysvg .mz{stroke:var(--bodyc);stroke-width:1.2;stroke-linejoin:round;transition:fill .3s}
+.heatkey em{font-weight:700;color:var(--ink)}
+.heatkey{display:flex;flex-wrap:wrap;justify-content:center;gap:6px 12px;margin-top:10px;font-size:12.5px;color:var(--muted)}
+.heatkey span{display:flex;align-items:center;gap:5px}
+.heatkey i{width:12px;height:12px;border-radius:3px;display:block}
+.heatkey em{font-style:normal}
+.mrow{display:grid;grid-template-columns:14px 1fr auto;gap:10px;align-items:center;padding:7px 0;border-top:1px solid var(--line);font-size:15px}
+.mrow:first-child{border-top:0}
+.mrow i{width:14px;height:14px;border-radius:4px;display:block}
+.mrow b{font-variant-numeric:tabular-nums}
 </style>
 </head>
 <body>
@@ -731,6 +754,15 @@ ex('battle_ropes','Battle ropes','cardio','cardio',1,{nw:true,unit:'s',r:'30'});
 ex('burpee','Burpees','cardio','cardio',1,{nw:true,r:'10-15'});
 ex('mountain','Mountain climbers','cardio','cardio',1,{nw:true,unit:'s',r:'30-45'});
 
+// secondary muscles (count as half a set) for exercises defined without them
+const ALSO={squat:['glutes'],front_squat:['glutes','core'],hack_squat:['glutes'],leg_press:['glutes'],goblet:['glutes'],bulgarian:['glutes'],lunge:['glutes'],
+ deadlift:['back','glutes'],rdl:['glutes'],sl_rdl:['glutes'],back_ext:['back','glutes'],
+ bench:['triceps','shoulders'],incline_bench:['shoulders','triceps'],db_bench:['triceps','shoulders'],incline_db:['shoulders','triceps'],chest_press:['triceps','shoulders'],dips:['triceps','shoulders'],pushup:['triceps','shoulders'],
+ pullup:['biceps'],chinup:['biceps'],lat_pull:['biceps'],bb_row:['biceps'],tbar:['biceps'],seated_row:['biceps'],cs_row:['biceps'],db_row:['biceps'],
+ ohp_bb:['triceps'],ohp:['triceps'],face_pull:['back'],rear_fly:['back'],
+ bb_curl:['forearms'],preacher:['forearms'],hammer:['forearms'],cg_bench:['chest','shoulders'],
+ leg_raise:['forearms'],ab_wheel:['shoulders']};
+Object.entries(ALSO).forEach(([id,a])=>{const x=E[id];if(x)a.forEach(m=>{if(m!==x.m&&!x.also.includes(m))x.also.push(m)})});
 const MUSCLES=[['all','All'],['glutes','Glutes'],['hamstrings','Hamstrings'],['quads','Quads'],['chest','Chest'],['back','Back'],['shoulders','Shoulders'],['biceps','Biceps'],['triceps','Triceps'],['forearms','Forearms'],['core','Core'],['calves','Calves'],['cardio','Cardio']];
 const defR=x=>x.r||(x.inc<=1?'12-15':'8-12');
 const mlabel=x=>cap(x.m)+(x.also.length?', '+x.also.join(', '):'')+(x.custom?', added by you':'');
@@ -1784,6 +1816,58 @@ const HZBG={
   night:{top:'color-mix(in srgb,var(--plum) 92%,#000)',low:'color-mix(in srgb,#000 35%,color-mix(in srgb,#000 22%,var(--plum)))',high:'color-mix(in srgb,#000 22%,var(--plum))'}
 };
 let HOMESKY=null;
+/* ---------- muscle heat map ---------- */
+const isoOf=isoDate;
+const MAPR={today:{l:'Today',from:d=>d},d7:{l:'Last 7 days',from:d=>new Date(d.getFullYear(),d.getMonth(),d.getDate()-6)},sun:{l:'Sun–Sat',from:d=>new Date(d.getFullYear(),d.getMonth(),d.getDate()-d.getDay())}};
+// set counts where each heat level starts: one session vs a week
+const HEATT={today:[1,2,4,6,9],week:[1,5,10,15,20]};
+const HEAT=['var(--mz0)','#F9D3E1','#F2A0BE','#E8659A','#D93A74','#8E1F52'];
+const heatLv=(v,r)=>(HEATT[r==='today'?'today':'week']).filter(t=>v>=t).length;
+function bodySVG(view,female,lv){
+  // left half is drawn once and mirrored; female build: narrower shoulders and waist, wider hips
+  const S=female?4:0,Wd=female?4:0,H=female?5:0;
+  const sx=(d,dx)=>d.replace(/(-?[\d.]+) (-?[\d.]+)/g,(_,x,y)=>`${+x+dx} ${y}`);
+  const out=`M100 56 L92 56 C86 60 ${74+S} 62 ${64+S} 66 C${54+S} 69 ${49+S} 78 ${48+S} 90 C${47+S} 104 ${46+S} 118 ${45+S} 132 C${44+S} 146 ${42+S} 160 ${40+S} 176 C${39+S} 188 ${38+S} 196 ${39+S} 204 C${37+S} 212 ${40+S} 220 ${44+S} 220 C${48+S} 220 ${50+S} 212 ${50+S} 204 C${51+S} 194 ${53+S} 182 ${55+S} 168 C${57+S} 154 ${58+S} 140 ${59+S} 128 C${60+S} 118 ${60+S} 110 ${61+S} 104 C${62+S} 120 ${64+Wd} 140 ${66+Wd} 156 C${67+Wd} 166 ${66+Wd} 176 ${64-H/2} 188 C${62-H} 200 ${62-H} 212 ${64-H} 224 C${66-H} 252 ${68-H/2} 278 70 296 C71 312 70 328 72 344 C73 358 74 370 74 378 C70 384 66 388 70 392 L90 392 C92 386 88 380 88 372 C87 352 90 330 89 312 C88 300 90 290 92 270 C94 250 98 236 100 230`;
+  const fill=m=>HEAT[lv[m]||0];
+  const mz=(m,d)=>`<path class="mz" d="${d}" fill="${fill(m)}"/>`;
+  let half='';
+  half+=mz('shoulders',sx('M64 67 C54 69 49 78 49 92 C53 88 58 84 66 80 C66 74 66 70 64 67 Z',S));
+  half+=mz('forearms',sx('M45 140 C42 154 41 168 41 182 C44 182 48 172 51 158 C53 148 52 140 49 136 Z',S));
+  if(view==='front'){
+    half+=mz('chest',female?sx('M98 78 C88 75 77 79 71 89 C68 99 74 109 84 111 C92 111 98 105 98 97 Z',S):sx('M98 72 C88 70 76 72 67 80 C64 88 66 98 72 104 C82 108 92 106 98 100 Z',S));
+    half+=mz('biceps',sx('M51 96 C48 108 48 122 51 132 C55 130 58 120 58 106 C57 99 54 95 51 96 Z',S));
+    [110,127,144].forEach(y=>{half+=`<rect class="mz" x="88.5" y="${y+(female?3:0)}" width="10" height="14" rx="4" fill="${fill('core')}"/>`});
+    half+=mz('core',`M88.5 ${163+(female?3:0)} L98.5 ${163+(female?3:0)} L98.5 186 C94 184 90 176 88.5 168 Z`);
+    half+=mz('core',sx('M72 112 C78 120 81 140 81 160 C77 163 73 158 71 150 C69 138 69 124 72 112 Z',Wd));
+    half+=mz('quads',sx('M68 228 C64 250 66 276 74 294 C80 296 86 292 88 284 C92 262 92 244 88 232 C82 226 74 224 68 228 Z',-H/2));
+    half+=mz('calves','M77 312 C73 326 74 340 78 352 C82 350 86 338 86 324 C85 316 81 310 77 312 Z');
+  }else{
+    half+=mz('back',sx('M100 56 C94 60 84 63 70 67 C80 73 92 83 100 102 Z',S/2));
+    half+=mz('back',sx('M70 88 C68 108 70 130 78 150 C86 146 94 132 98 116 C92 104 82 95 70 88 Z',S));
+    half+=mz('back','M91 150 C89 164 91 176 96 184 L100 184 L100 148 Z');
+    half+=mz('triceps',sx('M50 96 C47 110 47 124 50 134 C54 132 57 120 57 108 C56 100 53 95 50 96 Z',S));
+    half+=mz('glutes',sx('M100 194 C90 190 74 192 68 205 C64 220 70 234 84 236 C94 236 100 228 100 216 Z',-H));
+    half+=mz('hamstrings',sx('M70 244 C66 262 70 280 78 294 C84 294 88 286 90 272 C92 258 90 246 84 240 C78 238 72 240 70 244 Z',-H/2));
+    half+=mz('calves','M75 312 C70 326 72 342 78 352 C84 350 88 338 88 324 C87 314 82 308 75 312 Z');
+  }
+  const hair=female?`<path class="hair" d="M85 34 C82 14 92 8 100 8 C108 8 118 14 115 34 C117 44 119 52 116 58 C110 52 106 50 100 50 C94 50 90 52 84 58 C81 52 83 44 85 34 Z"/>`:'';
+  const both=g=>`<g>${g}</g><g transform="translate(200 0) scale(-1 1)">${g}</g>`;
+  return `<svg class="bodysvg" viewBox="20 0 160 400" role="img" aria-label="${view==='front'?'Front':'Back'} of body">${hair}<g class="bd">${both(`<path d="${out}"/>`)}<ellipse cx="100" cy="30" rx="14" ry="18"/><rect x="93" y="44" width="14" height="14" rx="4"/></g>${both(half)}</svg>`;
+}
+function vMuscles(){
+  const r=MAPR[S.mapRange]?S.mapRange:'d7',now=new Date(),from=MAPR[r].from(new Date(now.getFullYear(),now.getMonth(),now.getDate()));
+  const c=musSets(from),ms=MUSCLES.filter(([k])=>k!=='all'&&k!=='cardio'),lv={};ms.forEach(([k])=>lv[k]=heatLv(c[k]||0,r));
+  const sx=(S.profile||{}).sex,female=sx==='f',T=HEATT[r==='today'?'today':'week'];
+  const sd=from.toLocaleDateString(undefined,{weekday:'short',day:'numeric',month:'short'}),span=r==='today'?'today':r==='d7'?`${sd} to today`:`since ${sd}`;
+  const keys=[['0','0']].concat(T.map((t,i)=>[i+1,i<T.length-1?(T[i+1]-1>t?`${t}–${T[i+1]-1}`:`${t}`):`${t}+`]));
+  let h=`<div class="wrap" style="padding-bottom:120px"><div class="whead"><button class="icon" data-a="gohome" aria-label="Back">${svg(ico.back)}</button><div class="wt"><b>Muscles worked</b><small>Sets ${esc(span)}</small></div></div>`;
+  h+=`<div class="seg" style="margin:4px 0 12px">${Object.entries(MAPR).map(([k,d])=>`<button class="${r===k?'on':''}" data-a="maprange" data-v="${k}">${d.l}</button>`).join('')}</div>`;
+  h+=`<div class="card bodymap"><div class="bodies"><figure>${bodySVG('front',female,lv)}<figcaption>Front</figcaption></figure><figure>${bodySVG('back',female,lv)}<figcaption>Back</figcaption></figure></div>`;
+  h+=`<div class="heatkey"><em>Sets</em>${keys.map(([i,l])=>`<span><i style="background:${HEAT[i]}"></i>${l}</span>`).join('')}</div></div>`;
+  if(!sx)h+=`<button class="row" data-a="profopen"><div><b>Showing a male figure</b><small>Set your gender in Body, About you to change it</small></div><span class="mini" style="display:grid;place-items:center">Set</span></button>`;
+  h+=`<div class="card">${ms.map(([k,l])=>{const v=c[k]||0;return `<div class="mrow"><i style="background:${HEAT[lv[k]]}"></i><span>${l}</span><b>${halfs(v)}</b></div>`}).join('')}<small style="display:block;margin-top:8px">Main muscle counts as 1 set, secondary muscles as half a set. ${r==='today'?'Includes sets ticked in a workout in progress.':'For growth, aim for 10 to 20 sets per muscle each week.'}</small></div>`;
+  return h+`</div>`;
+}
 function vHome(){
   const P=PROGRAMS[S.prog],ni=S.next[S.prog]%P.days.length,nd=P.days[ni],ws=weekStrip(),anim=lastView!=='home';
   const standalone=window.navigator.standalone===true||(window.matchMedia&&matchMedia('(display-mode: standalone)').matches);
@@ -1839,14 +1923,18 @@ function vHome(){
   return h+`</div></div>`;
 }
 
-function weekSets(){
-  const now=new Date(),mon=new Date(now.getFullYear(),now.getMonth(),now.getDate()-(now.getDay()+6)%7),c={};
-  S.logs.forEach(l=>{if(new Date(l.date)<mon)return;l.ex.forEach(e=>{const x=E[e.id];if(!x||x.m==='cardio')return;const n=e.sets.length;c[x.m]=(c[x.m]||0)+n;x.also.forEach(a=>{c[a]=(c[a]||0)+n/2})})});
+// sets per muscle since a start time: main muscle counts 1, secondary muscles count half
+function musSets(from){
+  const c={},add=(id,n)=>{const x=E[id];if(!x||x.m==='cardio'||!n)return;c[x.m]=(c[x.m]||0)+n;x.also.forEach(a=>{c[a]=(c[a]||0)+n/2})};
+  S.logs.forEach(l=>{if(new Date(l.date)>=from)l.ex.forEach(e=>add(e.id,e.sets.length))});
+  if(W)W.ex.forEach(e=>add(e.id,e.sets.filter(z=>z.d).length));
   return c;
 }
+function weekSets(){const now=new Date();return musSets(new Date(now.getFullYear(),now.getMonth(),now.getDate()-(now.getDay()+6)%7))}
+const halfs=v=>fmt(Math.round(v*2)/2);
 function setsCard(){
   const c=weekSets(),ms=MUSCLES.filter(([k])=>k!=='all'&&k!=='cardio');
-  return `<section class="card hcard"><div class="hh"><h3>Sets this week</h3><small>Aim for 10 to 20 per muscle</small></div><div style="margin-top:8px">${ms.map(([k,l])=>{const v=Math.round(c[k]||0),w=Math.min(100,v/20*100);return `<div class="wsr"><span>${l}</span><span class="wsb"><i style="width:${w}%;background:${v>=10?'var(--ok)':'var(--pop)'}"></i></span><b>${v}</b></div>`}).join('')}</div><small style="display:block;margin-top:8px">Secondary muscles count as half a set. Green means you’re in the growth range.</small></section>`;
+  return `<section class="card hcard tapcard" data-a="musmap"><div class="hh"><h3>Sets this week</h3><span class="link">Body map ${svg('<path d="M9 5l7 7-7 7"/>',16)}</span></div><small>Aim for 10 to 20 per muscle</small><div style="margin-top:8px">${ms.map(([k,l])=>{const v=Math.round((c[k]||0)*2)/2,w=Math.min(100,v/20*100);return `<div class="wsr"><span>${l}</span><span class="wsb"><i style="width:${w}%;background:${v>=10?'var(--ok)':'var(--pop)'}"></i></span><b>${fmt(v)}</b></div>`}).join('')}</div><small style="display:block;margin-top:8px">Secondary muscles count as half a set. Green means you’re in the growth range.</small></section>`;
 }
 function focusOf(items){const s=[];items.forEach(it=>{const m=cap(E[it.id].m);if(!s.includes(m))s.push(m)});return s.slice(0,3).join(', ')}
 
@@ -2010,7 +2098,7 @@ function render(){
   const y=window.scrollY;let h='';
   switch(UI.view){
     case 'home':h=vHome();break;case 'pick':h=vPick();break;case 'food':h=vFood();break;case 'body':h=vBody();break;case 'goals':h=vGoals();break;case 'progress':h=UI.ptab==='records'?vRecords():vHistory();break;
-    case 'builder':h=B?vBuilder():vPick();break;case 'workout':h=W?vWorkout():vHome();break;case 'done':h=UI.done?vDone():vHome();break;case 'logedit':h=UI.LE?vLogEdit():vHistory();break;
+    case 'builder':h=B?vBuilder():vPick();break;case 'muscles':h=vMuscles();break;case 'workout':h=W?vWorkout():vHome();break;case 'done':h=UI.done?vDone():vHome();break;case 'logedit':h=UI.LE?vLogEdit():vHistory();break;
   }
   $('#app').innerHTML=h;
   if(lastView!==UI.view&&$('#app').firstElementChild)$('#app').firstElementChild.classList.add('enter');
@@ -2118,6 +2206,8 @@ function act(a,d,t,ev){
       const p=S.profile||(S.profile={});p.h=h||null;if(a!==myAge()){p.age=a||null;p.ageAt=a?todayISO():null}if(s.sex!=null)p.sex=s.sex;
       save();UI.sheet=null;render();break}
     case 'hdot':{const hs=$('.hslides');if(hs)hs.scrollTo({left:+d.i*hs.clientWidth,behavior:'smooth'});break}
+    case 'musmap':UI.view='muscles';render();break;
+    case 'maprange':S.mapRange=d.v;save();render();break;
     case 'tadd':if(T){T.end+=15000;renderTimer()}break;
     case 'tsub':if(T){T.end-=15000;renderTimer()}break;
     case 'tskip':T=null;renderTimer();break;
