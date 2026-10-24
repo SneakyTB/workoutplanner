@@ -1953,11 +1953,17 @@ function cardBase(c,eyebrow,title,sub){
   c.fillStyle='rgba(255,255,255,.75)';c.font=SF(500,34);c.fillText(sub,72,y+62);
   return y+120;
 }
+// a tile can carry a third item (e.g. the exercise name), shown smaller on up to two lines; that row gets taller
+function wrapLines(c,t,max,n){const out=[];let line='';String(t).split(' ').forEach(w=>{const tt=line?line+' '+w:w;if(c.measureText(tt).width>max&&line){out.push(line);line=w}else line=tt});out.push(line);
+  if(out.length>n){const keep=out.slice(0,n);keep[n-1]=fitText(c,out.slice(n-1).join(' ')+' ',max).replace(/ …$/,'…');return keep}return out.map(l=>fitText(c,l,max))}
 function statTiles(c,y,tiles){
-  const gap=24,w=(CW-144-gap*(tiles.length-1))/tiles.length;
-  tiles.forEach(([v,l],i)=>{const x=72+i*(w+gap);rr(c,x,y,w,170,28);c.fillStyle='rgba(255,255,255,.12)';c.fill();
-    c.fillStyle='#fff';c.font=CF(800,66);c.fillText(fitText(c,String(v),w-40),x+28,y+94);c.fillStyle='rgba(255,255,255,.7)';c.font=SF(600,26);c.fillText(l,x+28,y+142)});
-  return y+170+44;
+  const gap=24,w=(CW-144-gap*(tiles.length-1))/tiles.length,tall=tiles.some(t=>t[2]),H=tall?212:170;
+  tiles.forEach(([v,l,sub],i)=>{const x=72+i*(w+gap);rr(c,x,y,w,H,28);c.fillStyle='rgba(255,255,255,.12)';c.fill();
+    if(sub){c.fillStyle='#fff';c.font=CF(800,Math.round(66*.78));c.fillText(fitText(c,String(v),w-40),x+28,y+70);
+      c.font=SF(700,26);c.fillStyle='rgba(255,255,255,.95)';wrapLines(c,sub,w-48,2).forEach((t,k)=>c.fillText(t,x+28,y+110+k*31))}
+    else{c.fillStyle='#fff';c.font=CF(800,66);c.fillText(fitText(c,String(v),w-40),x+28,y+94+(tall?14:0))}
+    c.fillStyle='rgba(255,255,255,.7)';c.font=SF(600,26);c.fillText(l,x+28,y+H-28)});
+  return y+H+44;
 }
 function rowsBlock(c,y,head,rows,maxY){
   c.fillStyle='rgba(255,255,255,.6)';c.font=SF(700,26);c.fillText(head.toUpperCase(),72,y);y+=26;
@@ -2015,8 +2021,8 @@ function weekCard(off){
     rr(x,300,y-22,CW-300-260,22,11);x.fillStyle='rgba(255,255,255,.12)';x.fill();rr(x,300,y-22,Math.max(22,(CW-300-260)*v/mx),22,11);x.fillStyle=cssVar('--pop','#FF5A36');x.fill();
     x.textAlign='right';x.font=CF(700,38);x.fillStyle='#fff';x.fillText(fmt(Math.round(v*2)/2)+' sets',CW-72,y);x.textAlign='left'});
   y+=48;
-  const tiles=[[volTxt(w.vol),WU()+' lifted'],[weekStreak()+' wk','Streak']];if(w.best)tiles.push([wf(w.best.w)+'×'+w.best.r,w.best.name]);
-  if(y+170<CH-120)statTiles(x,y,tiles);
+  const tiles=[[volTxt(w.vol),WU()+' lifted'],[weekStreak()+' wk','Streak']];if(w.best)tiles.push([wf(w.best.w)+' '+WU()+' × '+w.best.r,'Best lift',w.best.name]);
+  if(y+(w.best?212:170)<CH-100)statTiles(x,y,tiles);
   cardFooter(x);return c;
 }
 // canvas → image file, shared through the iPhone share sheet when possible
