@@ -1219,7 +1219,7 @@ function foodListHTML(){
 function refreshFoodList(){const el=$('#flist');if(el)el.innerHTML=foodListHTML()}
 const SEXES=[['m','Male'],['f','Female'],['','Not specified']];
 // age is stored with the date it was entered, so it counts up on its own
-const myAge=()=>{const p=S.profile||{};return p.age?p.age+Math.floor((Date.now()-new Date(p.ageAt+'T12:00:00'))/(365.25*864e5)):null};
+const myAge=()=>{const p=S.profile||{};return p.age?p.age+Math.max(0,Math.floor((Date.now()-new Date(p.ageAt+'T12:00:00'))/(365.25*864e5))):null};
 function estKcal(){const w=latest('weight'),p=S.profile||{},a=myAge();if(!w||!p.h||!a)return null;const bmr=10*w+6.25*p.h-5*a+(p.sex==='m'?5:p.sex==='f'?-161:-78);return {w,m:Math.round(bmr*1.55/50)*50}}
 function profileLine(){const p=S.profile||{},a=myAge(),bits=[];if(p.h)bits.push(fmt(p.h)+' cm');if(a)bits.push('age '+a);if(p.sex)bits.push((SEXES.find(x=>x[0]===p.sex)||[])[1]);return bits.join(', ')}
 function suggestProtein(){const w=latest('weight');return w?{lo:Math.round(w*1.6),hi:Math.round(w*2.2),w}:null}
